@@ -4,6 +4,8 @@ import SimulationMap from './components/SimulationMap';
 import MetricsDashboard from './components/MetricsDashboard';
 import EmergencyPanel from './components/EmergencyPanel';
 import AgentControls from './components/AgentControls';
+import RewardChart from './components/RewardChart';
+import './styles/index.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -307,6 +309,15 @@ const App = () => {
             agentStatus={agentStatus} 
             trainingProgress={trainingMetrics} 
             onAction={fetchAgentStatus} 
+          />
+        </div>
+
+        {/* Full-width: Reward Chart */}
+        <div style={{ gridColumn: '1 / 3', gridRow: '3 / 4' }}>
+          <RewardChart 
+            history={history}
+            title="Live Simulation Reward"
+            height={280}
           />
         </div>
 

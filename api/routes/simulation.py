@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 import api.main as state
 from api.websocket import broadcast_simulation_state
+from api.routes.metrics import metrics_history, MAX_HISTORY
 from simulation.emergency_env import EmergencyEnv
 from agents.traffic_agent import TrafficAgent
 from agents.emergency_agent import EmergencyAgent
@@ -141,6 +142,23 @@ async def simulation_loop():
             )
         except Exception as e:
             print(f"Error broadcasting state: {e}")
+        
+        # 3b. Record to in-memory metrics history (feeds /metrics/* endpoints)
+        try:
+            total_wait = info.get("total_waiting_time", 0.0)
+            total_queue = info.get("total_queue_length", 0.0)
+            metrics_history.append({
+                "step": _current_step,
+                "reward": float(reward),
+                "waiting_time": float(total_wait),
+                "queue_length": float(total_queue),
+                "timestamp": time.time(),
+            })
+            # Maintain circular buffer size
+            if len(metrics_history) > MAX_HISTORY:
+                metrics_history.pop(0)
+        except Exception:
+            pass  # Non-critical — don't crash the sim loop for metrics
             
         # 4. Handle episode boundaries
         if terminated or truncated:

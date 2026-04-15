@@ -15,6 +15,17 @@ sumo:
                            # Increase for longer-term patterns; decrease for faster resets.
 
 # ------------------------------------------------------------------------------
+# ENVIRONMENT (consumed by training scripts)
+# These are derived from the SUMO section for backward compatibility.
+# train_traffic.py and train_emergency.py read from this section.
+# ------------------------------------------------------------------------------
+environment:
+  sumo_cfg: "simulation/sumo_configs/simulation.sumocfg"
+  base_port: 8813
+  num_envs: 4              # Number of parallel SUMO instances. Match to your CPU core count.
+  max_steps: 3600
+
+# ------------------------------------------------------------------------------
 # DQN AGENT (Traffic Control)
 # ------------------------------------------------------------------------------
 dqn:
@@ -51,6 +62,7 @@ ppo:
                            # Higher: more sample efficiency. Too high: risk of deviating too far from old policy.
   gamma: 0.95              # Lower than DQN because emergency traversal is a short-term sprint (~90s).
                            # Increasing it would make the agent care about traffic recovery after the vehicle left.
+  total_timesteps: 200000  # Total steps for emergency agent training (shorter task = fewer steps needed).
 
 # ------------------------------------------------------------------------------
 # REWARD WEIGHTS
@@ -68,9 +80,13 @@ reward:
 # ------------------------------------------------------------------------------
 training:
   total_timesteps: 500000  # Total steps across all envs for training.
-  eval_episodes: 10        # Number of episodes for deterministic evaluation.
   save_frequency: 50000    # How often to save intermediate model checkpoints.
   num_parallel_envs: 4     # Number of parallel SUMO instances. Match to your CPU core count.
+
+evaluation:
+  eval_episodes: 10        # Number of episodes for deterministic evaluation.
+  baseline_episodes: 5     # Number of episodes for baseline measurements.
+  fixed_timer_phase_duration: 30  # Seconds per phase for fixed-timer baseline.
 
 # ------------------------------------------------------------------------------
 # FILE PATHS
@@ -79,7 +95,10 @@ paths:
   model_dir: "models/saved/"
   log_dir: "logs/"
   output_dir: "simulation/sumo_configs/output/"
+  tensorboard_dir: "logs/traffic_dqn"
   tensorboard_log: "logs/traffic_dqn"
+  results_plot: "docs/results.png"
+  training_summary: "docs/training_summary.json"
 
 # ------------------------------------------------------------------------------
 # EXPERIMENT TRACKING

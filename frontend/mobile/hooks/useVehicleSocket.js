@@ -15,6 +15,12 @@ import * as Device from 'expo-device';
  * Pushing updates over the network faster than the physics clock ticks wastes 
  * battery and bandwidth entirely, as SUMO only resolves moveToXY() vehicle 
  * adjustments in discrete integer-second steps anyway.
+ *
+ * BUG FIX (v2): sensorData was previously in the useEffect dependency array.
+ * Since sensorData is a new object reference on every render (from useState in
+ * useVehicleSensor), this caused the WebSocket to tear down and recreate on
+ * every sensor reading (~1/sec). Now we use a ref to track the latest sensor
+ * data and only reconnect when serverIP or isEmergency changes.
  */
 
 export default function useVehicleSocket(serverIP, isEmergency = false, sensorData) {
@@ -28,6 +34,14 @@ export default function useVehicleSocket(serverIP, isEmergency = false, sensorDa
   const wsRef = useRef(null);
   const intervalRef = useRef(null);
   const deviceIdRef = useRef(`device_${Device.osBuildId?.substring(0,6) || Math.random().toString(36).substring(2,8)}`);
+  
+  // Track latest sensor data via ref to avoid WebSocket recreation on every reading
+  const sensorDataRef = useRef(sensorData);
+
+  // Keep the ref current without triggering reconnection
+  useEffect(() => {
+    sensorDataRef.current = sensorData;
+  }, [sensorData]);
 
   useEffect(() => {
     if (!serverIP) return;
@@ -45,13 +59,14 @@ export default function useVehicleSocket(serverIP, isEmergency = false, sensorDa
       // Start the heavy loop heartbeat
       intervalRef.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
-          // Send active sensor data buffer
+          // Read from the ref (always fresh) instead of the stale closure variable
+          const currentSensor = sensorDataRef.current;
           ws.send(JSON.stringify({
             vehicle_id: uniqueId,
-            latitude: sensorData.latitude,
-            longitude: sensorData.longitude,
-            speed: sensorData.speed,
-            acceleration: sensorData.acceleration,
+            latitude: currentSensor.latitude,
+            longitude: currentSensor.longitude,
+            speed: currentSensor.speed,
+            acceleration: currentSensor.acceleration,
             is_emergency: isEmergency,
             timestamp: Date.now() / 1000
           }));
@@ -87,7 +102,7 @@ export default function useVehicleSocket(serverIP, isEmergency = false, sensorDa
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (wsRef.current) wsRef.current.close();
     };
-  }, [serverIP, isEmergency, sensorData]); // Re-bind socket if IP or emergency status toggle changes identity
+  }, [serverIP, isEmergency]); // Only reconnect on IP or emergency mode change — NOT on sensorData
 
   return { connected, ...advice, deviceId: deviceIdRef.current };
 }
