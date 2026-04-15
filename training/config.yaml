@@ -1,0 +1,97 @@
+# ==============================================================================
+#  Traffic RL Twin — Comprehensive Configuration
+# ==============================================================================
+# This file centralizes all parameters for simulation, RL agents, and training.
+# Comments explain the impact of adjusting these values on learning performance.
+
+# ------------------------------------------------------------------------------
+# SUMO SETTINGS
+# ------------------------------------------------------------------------------
+sumo:
+  config_path: "simulation/sumo_configs/simulation.sumocfg"
+  base_port: 8813          # Starting port for TraCI. Multiple envs use ports base to (base + num_envs - 1).
+  step_length: 1.0         # Seconds per simulation step. Lower = smoother physics but slower training.
+  max_steps: 3600          # Duration of one episode (1 simulated hour). 
+                           # Increase for longer-term patterns; decrease for faster resets.
+
+# ------------------------------------------------------------------------------
+# DQN AGENT (Traffic Control)
+# ------------------------------------------------------------------------------
+dqn:
+  policy: "MlpPolicy"      # Multi-Layer Perceptron for vector observations.
+  net_arch: [256, 256, 128]# Layer sizes. More neurons = higher capacity but slower training/risk of overfitting.
+  learning_rate: 0.0001    # Step size for weight updates. 
+                           # Too high: unstable learning/oscillations. Too low: extremely slow convergence.
+  buffer_size: 100000      # Size of experience replay. 
+                           # Higher: more historical diversity. Lower: faster learning from recent (hot) data.
+  batch_size: 256          # Transitions sampled per update. 
+                           # Higher: stable gradients, good for GPU parallelism. Lower: nosier gradients (can help escape local optima).
+  gamma: 0.99              # Discount factor. Fraction of future reward kept.
+                           # Closer to 1.0 (0.99): cares about long-term queues. 
+                           # Lower (0.9): focuses only on immediate traffic clearing.
+  train_freq: 4            # Steps between gradient updates. 
+                           # Lower (1): more updates per step (intense). Higher: faster simulation collection.
+  target_update_interval: 1000 # Steps between syncing target network. 
+                           # Lower: faster target tracking. Higher: more stable, less oscillation.
+  exploration_fraction: 0.2# Fraction of total steps over which epsilon decays.
+  exploration_final_eps: 0.05 # Minimum random action probability. 
+                           # Higher: keeps exploring/noisy. Lower: purely follows learned policy.
+
+# ------------------------------------------------------------------------------
+# PPO AGENT (Emergency Green Corridor)
+# ------------------------------------------------------------------------------
+ppo:
+  policy: "MlpPolicy"
+  net_arch: [128, 128]     # Smaller network than DQN as the task (give corridor) is less complex.
+  learning_rate: 0.0003    # PPO typically uses a slightly higher rate than DQN.
+  n_steps: 2048            # Steps to collect before policy update.
+                           # Higher: more stable policy gradients. Lower: faster updates, more sensitive to noise.
+  batch_size: 128          # Mini-batch size for surrogate loss updates.
+  n_epochs: 10             # Number of times to reuse collected data per update.
+                           # Higher: more sample efficiency. Too high: risk of deviating too far from old policy.
+  gamma: 0.95              # Lower than DQN because emergency traversal is a short-term sprint (~90s).
+                           # Increasing it would make the agent care about traffic recovery after the vehicle left.
+
+# ------------------------------------------------------------------------------
+# REWARD WEIGHTS
+# ------------------------------------------------------------------------------
+reward:
+  # Traffic Control Weights (Sum to 1.0 recommended)
+  w_waiting_time: 0.4      # Penalty for vehicle delay. Primary objective.
+  w_queue_length: 0.3      # Penalty for long queues (prevents gridlock).
+  w_throughput: 0.2        # Bonus for vehicles passing (prevents "permanent red" gaming).
+  w_stability: 0.1         # Penalty for flickering lights (reward shaping for realism).
+                           # Increase for fewer switches; decrease if agent becomes too "lazy" about changing.
+
+# ------------------------------------------------------------------------------
+# GENERAL TRAINING & EVALUATION
+# ------------------------------------------------------------------------------
+training:
+  total_timesteps: 500000  # Total steps across all envs for training.
+  eval_episodes: 10        # Number of episodes for deterministic evaluation.
+  save_frequency: 50000    # How often to save intermediate model checkpoints.
+  num_parallel_envs: 4     # Number of parallel SUMO instances. Match to your CPU core count.
+
+# ------------------------------------------------------------------------------
+# FILE PATHS
+# ------------------------------------------------------------------------------
+paths:
+  model_dir: "models/saved/"
+  log_dir: "logs/"
+  output_dir: "simulation/sumo_configs/output/"
+  tensorboard_log: "logs/traffic_dqn"
+
+# ------------------------------------------------------------------------------
+# EXPERIMENT TRACKING
+# ------------------------------------------------------------------------------
+wandb:
+  enabled: true
+  project: "traffic-rl-twin"
+  entity: ""               # Add your W&B username/entity here if preferred.
+
+# ------------------------------------------------------------------------------
+# DEMO & API SETTINGS
+# ------------------------------------------------------------------------------
+demo:
+  simulation_speed: 1.0    # Real-time factor (1.0 = normal speed). Increase for fast-forward.
+  websocket_port: 8000     # Port for the FastAPI/WebSocket dashboard communication.

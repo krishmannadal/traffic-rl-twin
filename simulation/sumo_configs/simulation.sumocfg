@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <!-- INPUT FILES -->
+    <!-- Defines the network and traffic demand files for the simulation -->
+    <input>
+        <net-file value="map.net.xml"/>
+        <route-files value="routes.rou.xml"/>
+    </input>
+
+    <!-- TIME SETTINGS -->
+    <!-- Defines simulation window and step resolution -->
+    <time>
+        <begin value="0"/>
+        <end value="3600"/>
+        <step-length value="1.0"/>
+    </time>
+
+    <!-- PROCESSING SETTINGS -->
+    <!-- Defines internal simulator behavior and physics -->
+    <processing>
+        <!-- Time window (steps) to remember waiting times; used for TraCI getWaitingTime() calls -->
+        <waiting-time-memory value="100"/>
+        
+        <!-- Random seed for reproducibility (default start of simulation) -->
+        <seed value="42"/>
+        
+        <!-- Collision handling: simply warn and continue -->
+        <collision.action value="warn"/>
+        
+        <!-- How long a vehicle stays in the network if teleported (disabled with -1) -->
+        <time-to-teleport value="-1"/>
+    </processing>
+
+    <!-- OUTPUT SETTINGS -->
+    <!-- Defines metrics to be recorded during the run -->
+    <output>
+        <!-- Per-vehicle trip statistics (travel time, wait time, etc.) -->
+        <tripinfo-output value="output/tripinfo.xml"/>
+        
+        <!-- Per-step aggregate statistics (total vehicles, mean speed, etc.) -->
+        <summary-output value="output/summary.xml"/>
+    </output>
+
+    <!-- REPORT SETTINGS -->
+    <!-- Configures console logging and verbosity -->
+    <report>
+        <!-- Suppress printing the step number to console in every step -->
+        <no-step-log value="true"/>
+        
+        <!-- Silence standard simulation warnings -->
+        <no-warnings value="true"/>
+    </report>
+
+</configuration>

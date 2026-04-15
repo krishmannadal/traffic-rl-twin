@@ -1,0 +1,10 @@
+models/saved/*.pt
+__pycache__/
+node_modules/
+*.sumodb
+venv/
+scratch/
+.vscode/
+.DS_Store
+*.log
+*.pyc
