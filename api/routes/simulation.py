@@ -7,12 +7,12 @@ import time
 import uuid
 import yaml
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
-import api.main as state
+import api.state as state
 from api.websocket import broadcast_simulation_state
 from api.routes.metrics import metrics_history, MAX_HISTORY
 from simulation.emergency_env import EmergencyEnv
@@ -30,6 +30,9 @@ _speed_multiplier = 1.0
 
 
 # ── Request Models ─────────────────────────────────────────────────────
+class StartRequest(BaseModel):
+    map_name: Optional[str] = None
+
 class EmergencyRequest(BaseModel):
     origin_edge: str
     destination_edge: str
@@ -47,9 +50,23 @@ def _load_config() -> Dict[str, Any]:
             return yaml.safe_load(f)
     return {}
 
-def _init_envs_if_needed():
+def _init_envs_if_needed(map_name: Optional[str] = None):
     """Lazy initialize the environments and agents if not already done."""
     config = _load_config()
+    
+    net_file = None
+    if map_name and map_name != "default":
+        net_file = f"simulation/sumo_configs/custom_maps/{map_name}.net.xml"
+        # Recreate env if it exists to load the new map
+        if state.emergency_env is not None:
+            try:
+                state.emergency_env.close()
+            except Exception:
+                pass
+            state.emergency_env = None
+            state.traffic_env = None
+            state.traffic_agent = None
+            state.emergency_agent = None
     
     if state.emergency_env is None:
         sumo_cfg = config.get("sumo", {}).get("config_path", "simulation/sumo_configs/simulation.sumocfg")
@@ -58,6 +75,7 @@ def _init_envs_if_needed():
         # Use EmergencyEnv as our primary env since it supports both normal + emergency logic
         state.emergency_env = EmergencyEnv(
             config_path=sumo_cfg, 
+            net_file=net_file,
             port=base_port, 
             use_gui=False, 
             max_steps=864000  # very large max_steps for continuous demo
@@ -176,7 +194,7 @@ async def simulation_loop():
 # ── Endpoints ──────────────────────────────────────────────────────────
 
 @router.post("/start", summary="Start the SUMO simulation")
-async def start_simulation(background_tasks: BackgroundTasks) -> Dict[str, Any]:
+async def start_simulation(background_tasks: BackgroundTasks, request: Optional[StartRequest] = None) -> Dict[str, Any]:
     """Start the background simulation loop and the SUMO process."""
     global _loop_active
     
@@ -186,7 +204,8 @@ async def start_simulation(background_tasks: BackgroundTasks) -> Dict[str, Any]:
         )
         
     try:
-        _init_envs_if_needed()
+        map_name = request.map_name if request else None
+        _init_envs_if_needed(map_name=map_name)
         
         state._sumo_running = True
         _loop_active = True

@@ -157,6 +157,7 @@ class TrafficEnv(gymnasium.Env):
     def __init__(
         self,
         config_path: Optional[str] = None,
+        net_file: Optional[str] = None,
         port: int = 8813,
         use_gui: bool = False,
         max_steps: int = MAX_STEPS,
@@ -180,6 +181,7 @@ class TrafficEnv(gymnasium.Env):
         # ── SUMO bridge ───────────────────────────────────────────────
         self._sumo = SumoEnvironment(
             cfg_path=Path(config_path) if config_path else None,
+            net_file=Path(net_file) if net_file else None,
             port=port,
             use_gui=use_gui,
         )
@@ -422,6 +424,16 @@ class TrafficEnv(gymnasium.Env):
         truncated = self._step_count >= self._max_steps
 
         return terminated, truncated
+
+    # ==================================================================
+    #  close()
+    # ==================================================================
+
+    def close(self):
+        """Clean up resources by stopping the TraCI bridge."""
+        if hasattr(self, '_sumo') and self._sumo is not None:
+            self._sumo.stop()
+        super().close()
 
     # ==================================================================
     #  PRIVATE — _build_info()

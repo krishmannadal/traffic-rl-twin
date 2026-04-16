@@ -110,7 +110,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-import api.main as state
+import api.state as state
 from api.websocket import broadcast_training_metrics
 
 router = APIRouter()

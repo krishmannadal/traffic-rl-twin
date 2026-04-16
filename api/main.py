@@ -94,7 +94,7 @@ from agents.emergency_agent import EmergencyAgent
 from api.websocket import ConnectionManager, ws_router
 
 # Route sub-routers
-from api.routes import simulation, agents, metrics, vehicles
+from api.routes import simulation, agents, metrics, vehicles, admin, user
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -104,23 +104,10 @@ from api.routes import simulation, agents, metrics, vehicles
 # Routes import them with: from api.main import sumo_env, manager, ...
 
 # WebSocket connection manager — tracks all live browser/mobile clients
-manager = ConnectionManager()
+# (Already initialized in state.manager)
 
 # Low-level SUMO bridge — not yet started (no SUMO process yet)
-sumo_env = SumoEnvironment()
-
-# Gymnasium wrappers — built on top of sumo_env
-traffic_env: TrafficEnv | None = None
-emergency_env: EmergencyEnv | None = None
-
-# RL agents — initialised but not trained; routes can trigger training
-traffic_agent: TrafficAgent | None = None
-emergency_agent: EmergencyAgent | None = None
-
-# Runtime state flags — routes read/write these
-_sumo_running: bool = False
-_agent_loaded: bool = False
-
+from api import state
 
 # ──────────────────────────────────────────────────────────────────────
 #  Lifespan Context Manager
@@ -131,40 +118,35 @@ async def lifespan(app: FastAPI):
     """
     Application lifespan: runs startup code, yields control to FastAPI,
     then runs shutdown code when the server terminates.
-
-    Startup:
-      • Validate that SUMO config exists
-      • Log that the API is ready
-
-    Shutdown:
-      • Stop SUMO if it was started (prevents orphan processes)
-      • Close any open WebSocket connections
     """
-    global _sumo_running
-
     # ── STARTUP ───────────────────────────────────────────────────────
     print("=" * 55)
     print("  [API] Traffic RL Twin API starting up...")
     print("=" * 55)
     print("  Endpoints ready at http://localhost:8000")
     print("  Interactive docs at http://localhost:8000/docs")
-    print("  WebSocket at      ws://localhost:8000/ws")
     print("=" * 55)
 
-    # Hand control to FastAPI — all requests are served here
     yield
 
     # ── SHUTDOWN ──────────────────────────────────────────────────────
     print("\n[STOP] Traffic RL Twin API shutting down...")
-
-    # Stop SUMO if it was started to avoid orphan processes holding ports
-    if _sumo_running:
-        try:
-            sumo_env.stop()
-            print("  [DONE] SUMO stopped")
-        except Exception as e:
-            print(f"  [WARN] Error stopping SUMO: {e}")
-
+    
+    # 1. Halt Background Simulation
+    state._sumo_running = False
+    
+    # 2. Cleanup Environments
+    try:
+        # Use emergency_env as our primary handle (it inherits from TrafficEnv/SumoEnvironment)
+        if state.emergency_env:
+            state.emergency_env.stop()
+            print("  [OK] SUMO process terminated.")
+        elif state.sumo_env:
+            state.sumo_env.stop()
+            print("  [OK] SUMO process terminated.")
+    except Exception as e:
+        print(f"  [WARN] Error during SUMO cleanup: {e}")
+    
     print("  [DONE] Shutdown complete")
 
 
@@ -230,6 +212,18 @@ app.include_router(
     vehicles.router,
     prefix="/vehicles",
     tags=["Vehicles"]
+)
+
+app.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["Admin"]
+)
+
+app.include_router(
+    user.router,
+    prefix="/user",
+    tags=["User"]
 )
 
 # WebSocket endpoints (Dashboard & Mobile)
@@ -302,9 +296,9 @@ async def health_check() -> Dict[str, Any]:
     """
     return {
         "api_status": "ok",
-        "sumo_running": _sumo_running,
-        "agent_loaded": _agent_loaded,
-        "connected_clients": manager.active_connections_count,
+        "sumo_running": state._sumo_running,
+        "agent_loaded": getattr(state, "_agent_loaded", False),
+        "connected_clients": state.manager.active_connections_count,
     }
 
 

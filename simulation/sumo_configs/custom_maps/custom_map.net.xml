@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-04-17T00:29:18.009330+05:30 by Eclipse SUMO netconvert 1.26.0
+<netconvertConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
+
+    <input>
+        <node-files value="simulation\sumo_configs\custom_maps\custom_map.nod.xml"/>
+        <edge-files value="simulation\sumo_configs\custom_maps\custom_map.edg.xml"/>
+    </input>
+
+    <output>
+        <output-file value="simulation\sumo_configs\custom_maps\custom_map.net.xml"/>
+    </output>
+
+</netconvertConfiguration>
+-->
+
+<net version="1.20" junctionCornerDetail="5" limitTurnSpeed="5.50" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/net_file.xsd">
+
+    <location netOffset="-285.00,-66.00" convBoundary="0.00,0.00,307.00,292.00" origBoundary="285.00,66.00,592.00,358.00" projParameter="!"/>
+
+    <edge id="edge_0" from="node_1" to="node_0" priority="-1">
+        <lane id="edge_0_0" index="0" speed="13.89" length="141.30" shape="308.60,0.00 308.60,141.30"/>
+    </edge>
+    <edge id="edge_1" from="node_2" to="node_0" priority="-1">
+        <lane id="edge_1_0" index="0" speed="13.89" length="144.50" shape="305.40,292.00 305.40,147.50"/>
+    </edge>
+    <edge id="edge_2" from="node_3" to="node_0" priority="-1">
+        <lane id="edge_2_0" index="0" speed="13.89" length="302.30" shape="0.00,144.40 302.30,144.40"/>
+    </edge>
+
+    <junction id="node_0" type="dead_end" x="307.00" y="146.00" incLanes="edge_1_0 edge_0_0 edge_2_0" intLanes="" shape="303.80,147.50 307.00,147.50 307.83,145.12 309.37,143.68 309.96,142.73 310.20,141.30 307.00,141.30 306.48,142.13 305.82,142.43 304.91,142.63 303.74,142.76 302.30,142.80 302.30,146.00 303.13,146.17 303.42,146.38 303.63,146.67 303.76,147.04"/>
+    <junction id="node_1" type="dead_end" x="307.00" y="0.00" incLanes="" intLanes="" shape="307.00,0.00 310.20,0.00"/>
+    <junction id="node_2" type="dead_end" x="307.00" y="292.00" incLanes="" intLanes="" shape="307.00,292.00 303.80,292.00"/>
+    <junction id="node_3" type="dead_end" x="0.00" y="146.00" incLanes="" intLanes="" shape="0.00,146.00 0.00,142.80"/>
+
+</net>

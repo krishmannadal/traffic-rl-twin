@@ -118,12 +118,14 @@ class SumoEnvironment:
     def __init__(
         self,
         cfg_path: Optional[Path] = None,
+        net_file: Optional[Path] = None,
         port: int = 8813,
         use_gui: bool = False,
         step_length: float = 1.0,
         min_phase_duration: int = 5,
     ):
         self.cfg_path = Path(cfg_path) if cfg_path else SUMO_CFG_PATH
+        self.net_file = Path(net_file) if net_file else None
         self.port = port
         self.use_gui = use_gui
         self.step_length = step_length
@@ -135,7 +137,8 @@ class SumoEnvironment:
         self._steps_since_phase_change: int = 0
 
         # Caches filled on first connection
-        self._controlled_lanes: List[str] = []   # lanes feeding TL_JUNCTION_ID
+        self.tl_id: str = TL_JUNCTION_ID         # dynamic TL ID
+        self._controlled_lanes: List[str] = []   # lanes feeding self.tl_id
         self._num_phases: int = 0                # total phases in the TL program
 
     # ──────────────────────────────────────────────────────────────────
@@ -183,12 +186,18 @@ class SumoEnvironment:
         sumo_cmd = [
             sumo_binary,
             "--configuration-file", str(self.cfg_path),
+        ]
+        
+        if self.net_file and self.net_file.exists():
+            sumo_cmd.extend(["--net-file", str(self.net_file)])
+
+        sumo_cmd.extend([
             "--step-length", str(self.step_length),
             "--no-step-log",
             "--no-warnings",
             "--time-to-teleport", "-1",
             "--collision.action", "warn",
-        ]
+        ])
 
         last_error: Optional[Exception] = None
 
@@ -200,10 +209,18 @@ class SumoEnvironment:
                 self._steps_since_phase_change = 0
 
                 # ── Query static network info once ────────────────────
+                tls = traci.trafficlight.getIDList()
+                if TL_JUNCTION_ID in tls:
+                    self.tl_id = TL_JUNCTION_ID
+                elif tls:
+                    self.tl_id = tls[0]
+                else:
+                    self.tl_id = TL_JUNCTION_ID
+                    
                 self._controlled_lanes = list(
-                    traci.trafficlight.getControlledLanes(TL_JUNCTION_ID)
+                    traci.trafficlight.getControlledLanes(self.tl_id)
                 )
-                logics = traci.trafficlight.getAllProgramLogics(TL_JUNCTION_ID)
+                logics = traci.trafficlight.getAllProgramLogics(self.tl_id)
                 self._num_phases = len(logics[0].phases) if logics else 4
 
                 print(
@@ -364,12 +381,12 @@ class SumoEnvironment:
             )
 
         # ── Traffic light state ───────────────────────────────────────
-        # Phase index (integer) — e.g. 0 for N-S green, 2 for E-W green
-        state.signal_phase = traci.trafficlight.getPhase(TL_JUNCTION_ID)
+        # Wait, getPhase returns an int index of the current phase pattern
+        state.signal_phase = traci.trafficlight.getPhase(self.tl_id)
 
-        # Full phase string for debugging / visualisation
+        # Get the actual string representation of the phase (e.g. "GGrr")
         state.signal_state = traci.trafficlight.getRedYellowGreenState(
-            TL_JUNCTION_ID
+            self.tl_id
         )
 
         # ── Emergency vehicle detection ───────────────────────────────
@@ -444,16 +461,17 @@ class SumoEnvironment:
 
         try:
             # ── Guard: enforce minimum phase duration ─────────────────
-            current_phase = traci.trafficlight.getPhase(TL_JUNCTION_ID)
-            if (
-                action != current_phase
-                and self._steps_since_phase_change >= self.min_phase_duration
-            ):
-                traci.trafficlight.setPhase(TL_JUNCTION_ID, action)
-                traci.trafficlight.setPhaseDuration(TL_JUNCTION_ID, 1_000_000)
-                self._steps_since_phase_change = 0
-            else:
-                self._steps_since_phase_change += 1
+            if action < self.action_space.n:
+                current_phase = traci.trafficlight.getPhase(self.tl_id)
+                if action != current_phase:
+                    # Enforce minimum cycle length
+                    if self._steps_since_phase_change >= self.min_phase_duration:
+                        # Switch phase directly
+                        traci.trafficlight.setPhase(self.tl_id, action)
+                        traci.trafficlight.setPhaseDuration(self.tl_id, 1_000_000)
+                        self._steps_since_phase_change = 0
+                else:
+                    self._steps_since_phase_change += 1
 
             # ── Advance the simulation by one step ────────────────────
             traci.simulationStep()
@@ -535,29 +553,29 @@ class SumoEnvironment:
 
         # getControlledLinks returns a list-of-lists: each element is a list
         # of (incoming_lane, outgoing_lane, internal_lane) tuples for one
-        # signal link index.
-        controlled_links = traci.trafficlight.getControlledLinks(TL_JUNCTION_ID)
-
-        phase_chars = []
-        for link_group in controlled_links:
+        # which gives a list of tuples like (lanes_controlled_by_index_0, ...)
+        controlled_links = traci.trafficlight.getControlledLinks(self.tl_id)
+        
+        # We need a phase string with length == number of signal links
+        phase_chars = ["r"] * len(controlled_links)
+        for i, link_group in enumerate(controlled_links):
             if not link_group:
-                phase_chars.append("r")
                 continue
             incoming_lane = link_group[0][0]  # e.g. "north_to_center_0"
             # Extract the edge part (drop the lane index suffix after "_")
             incoming_edge = "_".join(incoming_lane.split("_")[:-1])
             if incoming_edge in edge_ids:
-                phase_chars.append("G")   # unconditional green
+                phase_chars[i] = "G"   # unconditional green
             else:
-                phase_chars.append("r")   # red for all others
+                phase_chars[i] = "r"   # red for all others
 
         custom_phase_str = "".join(phase_chars)
 
         # setRedYellowGreenState() lets you write an arbitrary phase string
         # bypassing the programmatic phase logic entirely.  Use with care
-        # — invalid strings can cause SUMO to raise an error.
+        # - invalid strings can cause SUMO to raise an error.
         traci.trafficlight.setRedYellowGreenState(
-            TL_JUNCTION_ID, custom_phase_str
+            self.tl_id, custom_phase_str
         )
 
     # ──────────────────────────────────────────────────────────────────

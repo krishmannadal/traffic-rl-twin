@@ -136,12 +136,14 @@ class EmergencyEnv(TrafficEnv):
     def __init__(
         self,
         config_path: Optional[str] = None,
+        net_file: Optional[str] = None,
         port: int = 8813,
         use_gui: bool = False,
         max_steps: int = 3600,
     ):
         super().__init__(
             config_path=config_path,
+            net_file=net_file,
             port=port,
             use_gui=use_gui,
             max_steps=max_steps,

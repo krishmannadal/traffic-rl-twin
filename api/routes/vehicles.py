@@ -91,7 +91,7 @@ from typing import Any, Dict, Optional
 import traci
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-import api.main as state
+import api.state as state
 from simulation.coordinate_mapper import CoordinateMapper
 
 router = APIRouter()

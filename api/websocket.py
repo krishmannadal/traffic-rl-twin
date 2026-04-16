@@ -345,51 +345,12 @@ async def broadcast_simulation_state(
     """
     Format a raw SumoEnvironment state dict into a clean JSON payload
     and broadcast it to all connected dashboard clients.
-
-    This is the hot path — called once per simulation step (1 Hz).
-    Keep it fast: no blocking I/O, no heavy computation.
-
-    Parameters
-    ----------
-    manager : ConnectionManager
-        The global connection manager from main.py.
-    env_state : dict
-        Raw state from TrafficEnv.render() or SumoEnvironment.get_state().
-        Expected keys: signal_phase, queue_length, waiting_time,
-                       vehicle_count, emergency_present, emergency_lanes,
-                       sim_step.
-    current_reward : float
-        Reward from the last step (for dashboard sparkline).
-    step : int
-        Current episode step number.
-
-    Broadcast Payload Schema
-    ────────────────────────
-    {
-      "type": "simulation_state",
-      "timestamp": float,          // server epoch time (for latency calc)
-      "step": int,
-      "simulation_time": float,    // SUMO simulation clock (seconds)
-      "signal": {
-        "phase_index": int,        // 0-3
-        "phase_label": str,        // "NS_GREEN" etc.
-        "phase_per_direction": {   // which direction is green/yellow/red
-          "north": str, "south": str, "east": str, "west": str
-        }
-      },
-      "vehicle_counts": {"north": int, "south": int, "east": int, "west": int},
-      "queue_lengths":  {"north": int, "south": int, "east": int, "west": int},
-      "waiting_times":  {"north": float, ...},  // seconds
-      "current_reward": float,
-      "emergency_active": bool,
-      "emergency_position": str | null   // edge ID of emergency vehicle
-    }
     """
+    import traci
+    
     phase_index = env_state.get("signal_phase", 0)
     phase_label = _PHASE_LABELS.get(phase_index, "UNKNOWN")
 
-    # Determine which movement each direction currently has
-    # based on signal phase index
     _phase_direction_state = {
         0: {"north": "GREEN",  "south": "GREEN",  "east": "RED",    "west": "RED"},
         1: {"north": "YELLOW", "south": "YELLOW", "east": "RED",    "west": "RED"},
@@ -397,9 +358,45 @@ async def broadcast_simulation_state(
         3: {"north": "RED",    "south": "RED",    "east": "YELLOW", "west": "YELLOW"},
     }
 
-    # Emergency position: first edge in emergency_lanes list, or null
+    # Emergency position
     emergency_lanes: List[str] = env_state.get("emergency_lanes", [])
     emergency_position: Optional[str] = emergency_lanes[0] if emergency_lanes else None
+
+    # ── Live Telemetry & Scoreboard ──
+    vehicle_positions = []
+    total_vehicles = 0
+    moving_vehicles = 0
+    waiting_vehicles = 0
+    total_wait_time = 0.0
+
+    try:
+        if traci.isLoaded():
+            veh_ids = traci.vehicle.getIDList()
+            total_vehicles = len(veh_ids)
+            
+            for vid in veh_ids:
+                x, y = traci.vehicle.getPosition(vid)
+                speed = traci.vehicle.getSpeed(vid)
+                vtype = traci.vehicle.getTypeID(vid)
+                waiting = traci.vehicle.getWaitingTime(vid)
+                
+                total_wait_time += waiting
+                if speed > 0.1:
+                    moving_vehicles += 1
+                else:
+                    waiting_vehicles += 1
+                
+                vehicle_positions.append({
+                    "id": vid,
+                    "x": round(x, 2),
+                    "y": round(y, 2),
+                    "speed": round(speed, 2),
+                    "type": "emergency" if vtype.startswith("emergency") else "car"
+                })
+    except:
+        pass # Handle case where traci is not yet ready or closed mid-loop
+
+    avg_wait = total_wait_time / total_vehicles if total_vehicles > 0 else 0.0
 
     payload = {
         "type": "simulation_state",
@@ -420,6 +417,13 @@ async def broadcast_simulation_state(
         "waiting_times": _group_by_direction(
             env_state.get("waiting_time", {})
         ),
+        "scoreboard": {
+            "total": total_vehicles,
+            "moving": moving_vehicles,
+            "waiting": waiting_vehicles,
+            "avg_wait": round(avg_wait, 1)
+        },
+        "vehicle_positions": vehicle_positions,
         "current_reward": round(current_reward, 4),
         "emergency_active": bool(env_state.get("emergency_present", False)),
         "emergency_position": emergency_position,
@@ -501,7 +505,7 @@ async def dashboard_ws_endpoint(websocket: WebSocket):
     only manages the connection lifecycle.  The manager is imported
     from main.py in routes/simulation.py.
     """
-    from api.main import manager as global_manager
+    from api.state import manager as global_manager
 
     await global_manager.connect(websocket)
     try:
@@ -561,7 +565,7 @@ async def vehicle_ws_endpoint(websocket: WebSocket, vehicle_id: str):
     Note: if the same vehicle_id reconnects (e.g. app restart), the
     old connection is replaced by the new one.
     """
-    from api.main import manager as global_manager
+    from api.state import manager as global_manager
 
     await global_manager.connect_vehicle(vehicle_id, websocket)
 

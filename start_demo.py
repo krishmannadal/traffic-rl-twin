@@ -37,15 +37,15 @@ except ImportError:
     print("pip install qrcode colorama")
     sys.exit(1)
 
-# ── CONFIGURATION ────────────────────────────────────────────────────────────
+# -- CONFIGURATION ------------------------------------------------------------
 FASTAPI_PORT = 8000
 FRONTEND_PORT = 5173
 PROJECT_ROOT = Path(__file__).resolve().parent
 
-# ── GLOBALS ──────────────────────────────────────────────────────────────────
+# -- GLOBALS ------------------------------------------------------------------
 processes = []
 
-# ── HELPERS ──────────────────────────────────────────────────────────────────
+# -- HELPERS ------------------------------------------------------------------
 
 def get_local_ip():
     """Get the local IP address for the Expo QR code."""
@@ -91,7 +91,7 @@ def cleanup():
     if not processes:
         return
         
-    print(f"\n{Fore.YELLOW}🛑 Stopping Traffic RL Twin background processes...{Style.RESET_ALL}")
+    print(f"\n{Fore.YELLOW}[STOP] Stopping Traffic RL Twin background processes...{Style.RESET_ALL}")
     
     # We use a copy to avoid mutation during iteration
     for p in list(processes):
@@ -102,14 +102,14 @@ def cleanup():
                     subprocess.run(['taskkill', '/F', '/T', '/PID', str(p.pid)], capture_output=True)
                 else:
                     p.terminate()
-                print(f"  {Fore.GREEN}✓{Style.RESET_ALL} Terminated process {p.pid}")
+                print(f"  [OK] Terminated process {p.pid}")
         except Exception as e:
-            print(f"  {Fore.RED}⚠{Style.RESET_ALL} Error killing process {p.pid}: {e}")
+            print(f"  {Fore.RED}[WARN]{Style.RESET_ALL} Error killing process {p.pid}: {e}")
         finally:
             if p in processes:
                 processes.remove(p)
                 
-    print(f"{Fore.GREEN}✓ All processes cleaned up.{Style.RESET_ALL}")
+    print(f"{Fore.GREEN}[OK] All processes cleaned up.{Style.RESET_ALL}")
 
 def signal_handler(sig, frame):
     """Bridge for OS signals."""
@@ -122,11 +122,11 @@ atexit.register(cleanup)
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
-# ── MAIN SEQUENCE ────────────────────────────────────────────────────────────
+# -- MAIN SEQUENCE ------------------------------------------------------------
 
 def main():
     print(f"{Fore.CYAN}{Style.BRIGHT}==========================================")
-    print(f"{Fore.CYAN}{Style.BRIGHT}   🚦 TRAFFIC RL TWIN - DEMO LAUNCHER")
+    print(f"{Fore.CYAN}{Style.BRIGHT}   --- TRAFFIC RL TWIN - DEMO LAUNCHER")
     print(f"{Fore.CYAN}{Style.BRIGHT}=========================================={Style.RESET_ALL}\n")
 
     # 1. Dependency Checks
@@ -144,9 +144,9 @@ def main():
     for name, module in checks:
         try:
             __import__(module)
-            print(f"  {Fore.GREEN}✓{Style.RESET_ALL} {name}")
+            print(f"  [OK] {name}")
         except ImportError:
-            print(f"  {Fore.RED}✗{Style.RESET_ALL} {name} (pip install {module})")
+            print(f"  [FAIL] {name} (pip install {module})")
             # We continue but warned
 
     # 2. Hardware Checks
@@ -163,22 +163,20 @@ def main():
         sys.exit(1)
     print(f"  SUMO Simulator  : {Fore.GREEN}{sumo_info}{Style.RESET_ALL}")
 
-    print(f"\n{Fore.CYAN}──────────────────────────────────────────{Style.RESET_ALL}\n")
+    print(f"\n{Fore.CYAN}------------------------------------------{Style.RESET_ALL}\n")
 
     # 4. Start FastAPI Backend
     print(f"{Style.BRIGHT}3. Launching FastAPI Backend (Port {FASTAPI_PORT})...{Style.RESET_ALL}")
     try:
         p_api = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "api.main:app", f"--port={FASTAPI_PORT}", "--host=0.0.0.0"],
-            cwd=PROJECT_ROOT,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT
+            cwd=PROJECT_ROOT
         )
         processes.append(p_api)
         time.sleep(2)  # Wait for startup
-        print(f"  {Fore.GREEN}✓ Backend running in background.{Style.RESET_ALL}")
+        print(f"  {Fore.GREEN}[OK] Backend running in background.{Style.RESET_ALL}")
     except Exception as e:
-        print(f"  {Fore.RED}✗ Failed to start API: {e}{Style.RESET_ALL}")
+        print(f"  {Fore.RED}[FAIL] Failed to start API: {e}{Style.RESET_ALL}")
         signal_handler(None, None)
 
     # 5. Start React Frontend
@@ -186,43 +184,41 @@ def main():
     try:
         # Check for node_modules before starting
         if not (PROJECT_ROOT / "frontend" / "node_modules").exists():
-            print(f"  {Fore.YELLOW}⚠ Warning: node_modules not found. Running 'npm install'...{Style.RESET_ALL}")
+            print(f"  {Fore.YELLOW}[WARN] Warning: node_modules not found. Running 'npm install'...{Style.RESET_ALL}")
             subprocess.run(['npm', 'install'], cwd=PROJECT_ROOT / "frontend", shell=True)
             
         p_fe = subprocess.Popen(
             ['npm', 'run', 'dev'],
             cwd=PROJECT_ROOT / "frontend",
-            shell=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT
+            shell=True
         )
         processes.append(p_fe)
         time.sleep(3)
-        print(f"  {Fore.GREEN}✓ Frontend running in background.{Style.RESET_ALL}")
+        print(f"  {Fore.GREEN}[OK] Frontend running in background.{Style.RESET_ALL}")
     except Exception as e:
-        print(f"  {Fore.RED}✗ Failed to start Frontend: {e}{Style.RESET_ALL}")
+        print(f"  {Fore.RED}[FAIL] Failed to start Frontend: {e}{Style.RESET_ALL}")
         signal_handler(None, None)
 
     # 6. Final Steps
     local_ip = get_local_ip()
     mobile_url = f"http://{local_ip}:{FASTAPI_PORT}"
     
-    print(f"\n{Fore.CYAN}──────────────────────────────────────────{Style.RESET_ALL}\n")
-    print(f"{Fore.YELLOW}{Style.BRIGHT}🚀 DEMO IS LIVE!{Style.RESET_ALL}")
+    print(f"\n{Fore.CYAN}------------------------------------------{Style.RESET_ALL}\n")
+    print(f"{Fore.YELLOW}{Style.BRIGHT}>>> DEMO IS LIVE!{Style.RESET_ALL}")
     
     print(f"\n  {Fore.WHITE}{Style.BRIGHT}Dashboard:{Style.RESET_ALL} http://localhost:{FRONTEND_PORT}")
     print(f"  {Fore.WHITE}{Style.BRIGHT}API Docs: {Style.RESET_ALL} http://localhost:{FASTAPI_PORT}/docs")
     print(f"  {Fore.WHITE}{Style.BRIGHT}Mobile Connection Information:{Style.RESET_ALL}")
     print(f"  Enter this IP in your phone app: {Fore.CYAN}{local_ip}{Style.RESET_ALL}")
 
-    # Generate QR Code for Mobile
-    print(f"\n{Style.BRIGHT}SCAN THIS QR CODE IN EXPO GO APP:{Style.RESET_ALL}")
-    qr = qrcode.QRCode(version=1, box_size=1, border=4)
-    qr.add_data(mobile_url)
-    qr.make(fit=True)
+    # Generate QR Code for Mobile (Disabled due to encoding incompatibility on some Windows terminals)
+    # print(f"\n{Style.BRIGHT}SCAN THIS QR CODE IN EXPO GO APP:{Style.RESET_ALL}")
+    # qr = qrcode.QRCode(version=1, box_size=1, border=4)
+    # qr.add_data(mobile_url)
+    # qr.make(fit=True)
+    # qr.print_ascii(invert=True)
     
-    # Render QR code directly to terminal
-    qr.print_ascii(invert=True)
+    print(f"\n  {Fore.GREEN}Mobile Link:{Style.RESET_ALL} {mobile_url}")
 
     # 7. Open Browser
     try:
@@ -237,8 +233,15 @@ def main():
         while True:
             time.sleep(1)
             # Check if processes are still alive
-            if p_api.poll() is not None or p_fe.poll() is not None:
-                print(f"\n{Fore.RED}One of the background processes died unexpectedly.{Style.RESET_ALL}")
+            api_code = p_api.poll()
+            fe_code = p_fe.poll()
+            
+            if api_code is not None:
+                print(f"\n{Fore.RED}Backend API process died (Exit Code: {api_code}).{Style.RESET_ALL}")
+                signal_handler(None, None)
+            
+            if fe_code is not None:
+                print(f"\n{Fore.RED}Frontend Dashboard process died (Exit Code: {fe_code}).{Style.RESET_ALL}")
                 signal_handler(None, None)
     except KeyboardInterrupt:
         signal_handler(None, None)
